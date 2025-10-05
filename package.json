@@ -2,12 +2,13 @@
   "name": "casino-back",
   "version": "1.2.0",
   "description": " A basic starter for an express.js API with Typescript",
-  "main": "src/index.ts",
+  "main": "dist/index.js",
   "scripts": {
-    "start": "ts-node src/index.ts",
+    "prestart": "npm run build",
+    "start": "node dist/index.js",
     "dev": "nodemon src/index.ts",
     "build": "tsc",
-    "start:dist": "node dist/src/index.js",
+    "start:dist": "node dist/index.js",
     "lint": "eslint --fix src test",
     "test": "jest",
     "typecheck": "tsc --noEmit"
