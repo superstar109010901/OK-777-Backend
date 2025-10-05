@@ -13,7 +13,7 @@ export async function getGamesByCategory({
 }: GetGamesOptions) {
   const offset = (page - 1) * limit;
 
-  const games = await prisma.$queryRawUnsafe<any[]>(`
+  const games = await prisma.$queryRawUnsafe(`
     SELECT *
     FROM "Games"
     WHERE "enabled" = true AND "status" = 'ACTIVATED'
@@ -26,7 +26,7 @@ export async function getGamesByCategory({
     LIMIT ${limit} OFFSET ${offset};
   `);
 
-  const totalResult = await prisma.$queryRawUnsafe<{ count: bigint }[]>(`
+  const totalResult = await prisma.$queryRawUnsafe(`
     SELECT COUNT(*)::bigint as count
     FROM "Games"
     WHERE "enabled" = true

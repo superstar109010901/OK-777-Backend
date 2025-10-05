@@ -9,16 +9,8 @@ import MessageResponse from './interfaces/MessageResponse';
 import path from "path";
 import http from "http";
 import { Server } from "socket.io";
-import { startObserverTron } from "./blockchain/tron";
-import { watchEth } from "./blockchain/ether";
-import { startWatchSolana } from "./blockchain/solana";
-import { startGames } from "./games/games";
-import { Prisma } from "./generated/prisma";
+// Defer blockchain/game imports to runtime flags to avoid top-level side effects
 require('dotenv').config();
-
-Prisma.Decimal.prototype.toJSON = function () {
-  return this.toNumber()
-}
 
 const app = express();
 
@@ -67,10 +59,29 @@ app.use('/v1/api/seamless', seamless);
 app.use(middlewares.notFound);
 app.use(middlewares.errorHandler);
 
-startObserverTron();
-watchEth();
-startWatchSolana();
-startGames();
+if (process.env.ENABLE_TRON_WATCHERS === "true") {
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  const { startObserverTron } = require("./blockchain/tron");
+  startObserverTron();
+}
+
+if (process.env.ENABLE_ETH_WATCHERS === "true") {
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  const { watchEth } = require("./blockchain/ether");
+  watchEth();
+}
+
+if (process.env.ENABLE_SOL_WATCHERS === "true") {
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  const { startWatchSolana } = require("./blockchain/solana");
+  startWatchSolana();
+}
+
+if (process.env.ENABLE_GAMES === "true") {
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  const { startGames } = require("./games/games");
+  startGames();
+}
 
 const server = http.createServer(app);
 

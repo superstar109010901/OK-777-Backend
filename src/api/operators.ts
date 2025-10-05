@@ -3,9 +3,9 @@ import { listWagers, getWager, saveProductsBulk } from '../db/operators';
 import { verifyRequest, generateLaunchGameSign } from '../utils/gsc';
 import isAuthenticated, { isAdmin } from '../utils/jwt';
 import { getProfile } from '../db/users';
-import { PrismaClient } from "../generated/prisma/client";
+// Removed Prisma usage; DB access should use pg pool via db modules
 import { getAllProducts } from '../db/games';
-import { getAllGames, getTempGames, savedGamesBulk } from "../db/admin";
+import { getAllGames, getTempGames, savedGamesBulk, addGame } from "../db/admin";
 
 const axios = require("axios");
 const crypto = require("crypto");
@@ -15,7 +15,7 @@ const SECRET_KEY = process.env.SECRET_KEY;
 const OPERATOR_URL = "https://staging.gsimw.com";
 const operator_lobby = "https://ok777-pink.vercel.app/lobby";
 
-const prisma = new PrismaClient();
+// const prisma = new PrismaClient();
 
 const router = express.Router();
 
@@ -101,11 +101,17 @@ router.get('/provider-games', async (req, res) => {
       }
     })
 
-    const insertedGames = await prisma.game.createMany({
-      data: gamesData,
-      skipDuplicates: true, // avoids duplicate gameCode insertion
-    });
-    console.log("Games inserted:", insertedGames);
+    // Insert games without Prisma using existing admin helper
+    let inserted = 0;
+    for (const g of gamesData) {
+      try {
+        await addGame(g);
+        inserted++;
+      } catch (e) {
+        // likely duplicate or constraint; skip
+      }
+    }
+    console.log("Games inserted:", inserted);
 
     return res.json({ data: result.data });
 

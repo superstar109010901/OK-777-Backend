@@ -1,21 +1,25 @@
 import { Wallet as EthWallet } from 'ethers';
-import * as tron from 'tronweb';
 import { encryptPrivateKey, decryptPrivateKey } from "../utils/bcrypt";
 import axios from 'axios';
 import 'dotenv/config';
 import prisma from "./prisma";
 import { Keypair } from "@solana/web3.js";
 import bs58 from "bs58";
-import { withdrawTrx, withdrawTokenTron } from "../blockchain/tron";
-import { withdrawERC20, withdrawEth } from "../blockchain/ether";
+// Avoid importing blockchain modules at startup; require when needed
 import { convert } from '../utils/exchange';
 
 
 export const createWallet = async (userId: number) => {
 
-    const tronWeb = new tron.TronWeb({ fullHost: process.env.TRON_FULLNODE });
-    const tronAccount = await tronWeb.createAccount();
-    const tronEncryptedPK = encryptPrivateKey(tronAccount.privateKey);
+    let tronAddress: string | null = null;
+    let tronEncryptedPK: string | null = null;
+    if (process.env.TRON_FULLNODE && /^https?:\/\//.test(process.env.TRON_FULLNODE)) {
+        const tr = require('tronweb');
+        const tronWeb = new tr.TronWeb({ fullHost: process.env.TRON_FULLNODE });
+        const tronAccount = await tronWeb.createAccount();
+        tronAddress = tronAccount.address.base58;
+        tronEncryptedPK = encryptPrivateKey(tronAccount.privateKey);
+    }
 
     const ethWallet = EthWallet.createRandom();
     const bnbWallet = EthWallet.createRandom();
@@ -31,13 +35,13 @@ export const createWallet = async (userId: number) => {
                 publicKey: keypair.publicKey.toBase58(),
                 privateKey: encryptPrivateKey(bs58.encode(Buffer.from(keypair.secretKey))),
             },
-            {
+            ...(tronAddress && tronEncryptedPK ? [{
                 userId: userId,
                 blockchain: 'Tron',
                 network: 'mainnet',
-                publicKey: tronAccount.address.base58,
+                publicKey: tronAddress,
                 privateKey: tronEncryptedPK,
-            },
+            }] : []),
             {
                 userId: userId,
                 blockchain: 'Ethereum',
@@ -264,12 +268,14 @@ export async function withdrawRequest(userId: number, to: string, currency: stri
         let amount = currency != "USDT" ? await convert(amountUsd, "USDT", currency) : amountUsd;
         
         if (blockchain == "Tron") {
+            const { withdrawTrx, withdrawTokenTron } = require("../blockchain/tron");
             if (currency == "TRX") {
                 await withdrawTrx(userId, to, amount);
             } else if (currency == "USDT") {
                 await withdrawTokenTron(userId, to, amount);
             }
-        }else if (blockchain == "Ethereum"){
+        } else if (blockchain == "Ethereum") {
+            const { withdrawERC20, withdrawEth } = require("../blockchain/ether");
             if (currency == "ETH") {
                 await withdrawEth(userId, to, amount);
             } else if (currency == "USDT") {

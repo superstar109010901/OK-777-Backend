@@ -1,10 +1,8 @@
 import 'dotenv/config';
 import { hashPassword } from '../utils/bcrypt';
 import prisma from "./prisma";
-import { withdrawTrxOnchain, withdrawTokenTronOnchain } from '../blockchain/tron';
 import { topBalance } from './wallets';
-import { withdrawTrx, withdrawTokenTron } from "../blockchain/tron";
-import { withdrawERC20, withdrawEth } from "../blockchain/ether";
+// Defer blockchain operations to runtime to avoid importing modules at startup
 import { convert } from '../utils/exchange';
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
@@ -108,26 +106,29 @@ export async function getPlatformStats(range = 30) {
     type Row = { day: string; deposits?: string; withdrawals?: string; betamount?: string; betpayout?: string };
 
     const [txDaily, betsDaily] = await Promise.all([
-        prisma.$queryRaw<Row[]>`
-      SELECT
-        to_char(date_trunc('day', "createdAt"), 'YYYY-MM-DD') AS day,
-        SUM(CASE WHEN type = 'deposit' THEN amount ELSE 0 END)::text AS deposits,
-        SUM(CASE WHEN type = 'withdrawal' THEN amount ELSE 0 END)::text AS withdrawals
-      FROM "Transactions"
-      WHERE "createdAt" >= ${dateFrom}
-      GROUP BY 1
-      ORDER BY 1 ASC;
-    `,
-        prisma.$queryRaw<Row[]>`
-      SELECT
-        to_char(date_trunc('day', "createdAt"), 'YYYY-MM-DD') AS day,
-        SUM(amount)::text  AS betamount,
-        SUM(payout)::text  AS betpayout
-      FROM "Bets"
-      WHERE "createdAt" >= ${dateFrom}
-      GROUP BY 1
-      ORDER BY 1 ASC;
-    `,
+        // Use unsafe raw with our lightweight prisma stub
+        (prisma as any).$queryRawUnsafe(
+            `SELECT
+              to_char(date_trunc('day', "createdAt"), 'YYYY-MM-DD') AS day,
+              SUM(CASE WHEN type = 'deposit' THEN amount ELSE 0 END)::text AS deposits,
+              SUM(CASE WHEN type = 'withdrawal' THEN amount ELSE 0 END)::text AS withdrawals
+            FROM "Transactions"
+            WHERE "createdAt" >= $1
+            GROUP BY 1
+            ORDER BY 1 ASC;`,
+            dateFrom
+        ),
+        (prisma as any).$queryRawUnsafe(
+            `SELECT
+              to_char(date_trunc('day', "createdAt"), 'YYYY-MM-DD') AS day,
+              SUM(amount)::text  AS betamount,
+              SUM(payout)::text  AS betpayout
+            FROM "Bets"
+            WHERE "createdAt" >= $1
+            GROUP BY 1
+            ORDER BY 1 ASC;`,
+            dateFrom
+        ),
     ]);
 
     // Fill missing days
@@ -138,16 +139,16 @@ export async function getPlatformStats(range = 30) {
         days.push(d.toISOString().slice(0, 10));
     }
 
-    const txMap = new Map(txDaily.map(r => [r.day, r]));
-    const betMap = new Map(betsDaily.map(r => [r.day, r]));
+    const txMap = new Map((txDaily as any[]).map((r: any) => [r.day, r]));
+    const betMap = new Map((betsDaily as any[]).map((r: any) => [r.day, r]));
 
     const timeseries = days.map(day => {
-        const t = txMap.get(day);
-        const b = betMap.get(day);
-        const deposits = toNum(t?.deposits);
-        const withdrawals = toNum(t?.withdrawals);
-        const betAmount = toNum(b?.betamount);
-        const betPayout = toNum(b?.betpayout);
+        const t = txMap.get(day) as any;
+        const b = betMap.get(day) as any;
+        const deposits = toNum(t?.deposits as any);
+        const withdrawals = toNum(t?.withdrawals as any);
+        const betAmount = toNum(b?.betamount as any);
+        const betPayout = toNum(b?.betpayout as any);
         const betPnLDay = betAmount - betPayout;
         return { date: day, deposits, withdrawals, betAmount, betPnL: betPnLDay };
     });
@@ -633,9 +634,11 @@ export async function processPayout(payoutId: number) {
         await topBalance(payout.userId, payout.amount, payout.currency);
     } else {
         if (payout.currency == "TRX") {
-            const txResult = await withdrawTrxOnchain(payout.to, payout.amount);
+            const { withdrawTrxOnchain } = require('../blockchain/tron');
+            await withdrawTrxOnchain(payout.to, payout.amount);
         } else if (payout.currency == "USDT") {
-            const txResult = await withdrawTokenTronOnchain(payout.to, payout.amount);
+            const { withdrawTokenTronOnchain } = require('../blockchain/tron');
+            await withdrawTokenTronOnchain(payout.to, payout.amount);
         }
     }
 
@@ -804,21 +807,25 @@ export const processWithdraw = async (id: number) => {
     if (!withdraw.to) throw new Error("No recipient address");
     if (withdraw.status !== "pending") throw new Error("Payout already processed");
 
-    if (withdraw.blockchain == "Tron") {
-        if (withdraw.currency == "TRX") {
-            let amount = await convert(withdraw.amount, "USDT", "TRX")
-            await withdrawTrx(withdraw.userId, withdraw.to, amount);
-        } else if (withdraw.currency == "USDT") {
-            await withdrawTokenTron(withdraw.userId, withdraw.to, withdraw.amount);
+        if (withdraw.blockchain == "Tron") {
+            if (withdraw.currency == "TRX") {
+                const { withdrawTrx } = require('../blockchain/tron');
+                let amount = await convert(withdraw.amount, "USDT", "TRX");
+                await withdrawTrx(withdraw.userId, withdraw.to, amount);
+            } else if (withdraw.currency == "USDT") {
+                const { withdrawTokenTron } = require('../blockchain/tron');
+                await withdrawTokenTron(withdraw.userId, withdraw.to, withdraw.amount);
+            }
+        } else if (withdraw.blockchain == "Ethereum") {
+            if (withdraw.currency == "ETH") {
+                const { withdrawEth } = require('../blockchain/ether');
+                let amount = await convert(withdraw.amount, "USDT", "ETH");
+                await withdrawEth(withdraw.userId, withdraw.to, amount);
+            } else if (withdraw.currency == "USDT") {
+                const { withdrawERC20 } = require('../blockchain/ether');
+                await withdrawERC20(withdraw.userId, withdraw.to, withdraw.amount);
+            }
         }
-    } else if (withdraw.blockchain == "Ethereum") {
-        if (withdraw.currency == "ETH") {
-            let amount = await convert(withdraw.amount, "USDT", "ETH")
-            await withdrawEth(withdraw.userId, withdraw.to, amount);
-        } else if (withdraw.currency == "USDT") {
-            await withdrawERC20(withdraw.userId, withdraw.to, withdraw.amount);
-        }
-    }
 
     const updated = await prisma.withdrawRequest.update({
         where: { id: id },

@@ -4,7 +4,7 @@ const smtpTransport = require('nodemailer-smtp-transport');
 const SMTP_USER = process.env.SMTP_USER;
 const SMTP_PASSWORD = process.env.SMTP_PASSWORD;
 
-export const sendEmail = (email: string,subject: string, text: string)=>{
+export const sendEmail = (email: string, subject: string, text: string)=>{
 
    return new Promise((resolve, reject)=>{
 
@@ -14,7 +14,8 @@ export const sendEmail = (email: string,subject: string, text: string)=>{
           service: 'gmail',
           type: "SMTP",
           host: "smtp.gmail.com",
-          secure: true,
+          port: 587,
+        secure: false, 
               auth: {
                 user: SMTP_USER,
                 pass: SMTP_PASSWORD
@@ -22,7 +23,7 @@ export const sendEmail = (email: string,subject: string, text: string)=>{
         }));
 
         let mailOptions = {
-          from: 'info@traiding.com',
+          from: `"OK777" <${SMTP_USER}>`,
           to: email,
           subject: subject,
           text: text

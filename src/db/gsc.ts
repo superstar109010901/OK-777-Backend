@@ -1,5 +1,5 @@
 import prisma from "./prisma";
-import { Decimal } from "@prisma/client/runtime/library"
+import { supabase } from "./supabase";
 
 function isNumeric(num) {
   return !isNaN(num)
@@ -19,33 +19,47 @@ export const getUserBalancesBulk = async (batchRequests: any[], currency: string
         accounts.push(parseInt(r.member_account))
     });
 
-    const users = await prisma.user.findMany({
-      where: { id: { in: accounts } },
-      include: {
-        balances: {
-          where: { currency: cleanedCurrency },
-        },
-      },
+    // Fetch balances directly via Supabase
+    if (accounts.length === 0) {
+      return batchRequests.map(reqItem => ({
+        member_account: reqItem.member_account,
+        product_code: reqItem.product_code,
+        balance: 0,
+        code: 1000,
+        message: "User not found",
+      }));
+    }
+
+    const { data, error } = await supabase
+      .from('Balances')
+      .select('userId, amount')
+      .in('userId', accounts)
+      .eq('currency', cleanedCurrency);
+
+    if (error) {
+      console.error("Supabase error in getUserBalancesBulk:", error);
+      return batchRequests.map(reqItem => ({
+        member_account: reqItem.member_account,
+        product_code: reqItem.product_code,
+        balance: 0,
+        code: 1000,
+        message: "Database error",
+      }));
+    }
+
+    const balanceMap = new Map<number, number>();
+    (data || []).forEach((row: any) => {
+      // Supabase returns decimals as strings
+      const amountNum = typeof row.amount === 'string' ? parseFloat(row.amount) : Number(row.amount || 0);
+      balanceMap.set(row.userId, amountNum);
     });
 
-
-    const userMap = new Map(
-      users.map(user => [user.id, user])
-    );
-
     return batchRequests.map(reqItem => {
-      const user = isNumeric(reqItem.member_account) ? userMap.get(parseInt(reqItem.member_account)) : null;
+      const key = isNumeric(reqItem.member_account) ? parseInt(reqItem.member_account) : null;
+      const raw = key != null && balanceMap.has(key) ? balanceMap.get(key)! : 0;
+      const exists = key != null && balanceMap.has(key);
 
-      if (!user) {
-        return {
-          member_account: reqItem.member_account,
-          product_code: reqItem.product_code,
-          balance: 0,
-          code: 1000,
-          message: "User not found",
-        };
-      } else if (user.balances.length === 0) {
-
+      if (!exists) {
         return {
           member_account: reqItem.member_account,
           product_code: reqItem.product_code,
@@ -54,8 +68,6 @@ export const getUserBalancesBulk = async (batchRequests: any[], currency: string
           message: "balance not found",
         };
       }
-
-      const raw = user.balances[0].amount.toNumber();
 
       return {
         member_account: reqItem.member_account,

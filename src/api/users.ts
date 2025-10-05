@@ -210,11 +210,14 @@ router.post<{}, {}>('/set-avatar', isAuthenticated, async (req, res) => {
 router.post<{}, {}>('/verify-email', isAuthenticated, async (req, res) => {
 
     let id = req['token'].id;
+    console.log(id);
+    
 
     try {
 
         const data = await createEmailVerificationCode(id);
-
+        console.log("data=>", data);
+        
         await sendEmail(data.email, "Email verification code", data.code);
 
         res.json({ message: "Ok", code: 200 });
