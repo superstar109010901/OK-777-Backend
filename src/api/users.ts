@@ -175,32 +175,37 @@ router.post<{}, {}>('/set-avatar', isAuthenticated, async (req, res) => {
     const { imageBase64 } = req.body;
 
     if (!imageBase64) {
-        return res.status(400).json({ code: 400, error: "No image data provided" });
+        return res.status(400).json({ code: 400, message: "No image data provided" });
     }
 
-    const matches = imageBase64.match(/^data:(.+);base64,(.+)$/);
-    if (!matches || matches.length !== 3) {
-        return res.status(400).json({ error: "Invalid base64 format" });
-    }
+    // Accept both full data URLs and raw base64 strings; default to png
+    const dataUrlMatch = typeof imageBase64 === 'string' ? imageBase64.match(/^data:(.+);base64,(.+)$/) : null;
+    const mimeType = dataUrlMatch ? dataUrlMatch[1] : 'image/png';
+    const base64Payload = dataUrlMatch ? dataUrlMatch[2] : imageBase64;
 
     try {
 
-        const ext = matches[1].split("/")[1];
-        const buffer = Buffer.from(matches[2], "base64");
+        const ext = (mimeType.split("/")[1] || 'png').toLowerCase();
+        const buffer = Buffer.from(base64Payload, "base64");
 
         const fileName = `img_${Date.now()}.${ext}`;
         const uploadDir = path.join(process.cwd(), "uploads");
 
         if (!fs.existsSync(uploadDir)) {
-            fs.mkdirSync(uploadDir);
+            fs.mkdirSync(uploadDir, { recursive: true });
         }
 
-        const filePath = path.join("uploads", fileName);
-        fs.writeFileSync(filePath, buffer);
+        const absolutePath = path.join(uploadDir, fileName);
+        fs.writeFileSync(absolutePath, buffer);
 
-        await setAvatar(id, filePath);
+        // Build web paths
+        const webPath = path.posix.join("/uploads", fileName);
+        const absoluteUrl = `${req.protocol}://${req.get("host")}${webPath}`;
 
-        res.json({ message: "Ok", code: 200 });
+        // Save relative web path in DB; return absolute URL for client rendering
+        await setAvatar(id, webPath);
+
+        res.json({ message: "Ok", code: 200, data: { path: webPath, url: absoluteUrl } });
     } catch (err) {
         res.status(400).json({ message: err.toString() });
     }
@@ -304,7 +309,7 @@ router.post<{}, {}>('/set-name', isAuthenticated, async (req, res) => {
     try {
         await setName(id, body.name);
 
-        res.json({ message: "Ok", code: 200 });
+        res.json({ message: "Ok", code: 200, data: { name: body.name } });
     } catch (err) {
         res.status(400).json({ message: err.toString() });
     }
@@ -348,10 +353,21 @@ router.get("/auth/google/callback", passport.authenticate("google", { session: f
         { expiresIn: "1h" }
     );
 
+    // If FRONTEND redirect url is configured, redirect with token for SPA consumption
+    const frontendBase = process.env.GOOGLE_OAUTH_REDIRECT_FRONTEND || process.env.FRONTEND_URL;
+    if (frontendBase) {
+        const redirectUrl = `${frontendBase.replace(/\/$/, "")}/auth/google/callback?token=${encodeURIComponent(token)}`;
+        return res.redirect(302, redirectUrl);
+    }
+
+    // Fallback: return JSON (useful for direct API testing)
     res.json({ code: 200, data: { token } });
 
 }
 );
+
+// Google OAuth entry point (redirects to Google)
+router.get("/auth/google", passport.authenticate("google", { scope: ["profile", "email"], session: false }));
 
 
 export default router;
