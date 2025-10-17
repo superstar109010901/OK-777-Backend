@@ -5,7 +5,7 @@ const crypto = require("crypto");
 const axios = require("axios");
 
 const OPERATOR_CODE = process.env.OPERATOR_CODE;
-const SECRET_KEY = process.env.SECRET_KEY;
+const SECRET_KEY = process.env.SECRET_KEY || "";
 const OPERATOR_URL = "https://staging.gsimw.com";
 
 const router = express.Router();
@@ -54,13 +54,13 @@ router.post('/get-games', async (req, res) => {
         const data = await getProviderGames()
         res.json({ data: data });
 
-    } catch (err) {
+    } catch (err: any) {
         console.error("❌ Request failed:", err.response?.data || err.message);
     }
 
 });
 
-function isNumeric(num) {
+function isNumeric(num: any): boolean {
     return !isNaN(num)
 }
 

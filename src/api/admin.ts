@@ -36,9 +36,16 @@ import {
   createProduct,
   addGame
 } from '../db/admin';
+import {
+  getReferralConfig,
+  updateReferralConfig,
+  getUserReferralBonuses,
+  expireOldBonuses
+} from '../db/bonus';
 import { isAdmin } from '../utils/jwt';
 import fs from "fs"
 import path from "path"
+import prisma from '../db/prisma';
 
 const router = express.Router();
 
@@ -605,6 +612,178 @@ router.post("/games/add", isAdmin, async (req, res) => {
   } catch (err: any) {
     console.error(err)
     res.status(500).json({ success: false, error: err.message })
+  }
+});
+
+// Referral Management Endpoints
+
+// Get referral configuration
+router.get("/referral-config", isAdmin, async (req, res) => {
+  try {
+    const config = await getReferralConfig();
+    res.json({ code: 200, data: config });
+  } catch (err: any) {
+    console.error(err);
+    res.status(500).json({ code: 500, error: err.message });
+  }
+});
+
+// Update referral configuration
+router.post("/referral-config", isAdmin, async (req, res) => {
+  try {
+    const {
+      depositBonusPercent,
+      betBonusPercent,
+      firstDepositBonus,
+      firstBetBonus,
+      signupBonus,
+      maxBonusPerUser,
+      bonusExpiryDays,
+      enabled
+    } = req.body;
+
+    const config = await updateReferralConfig({
+      depositBonusPercent,
+      betBonusPercent,
+      firstDepositBonus,
+      firstBetBonus,
+      signupBonus,
+      maxBonusPerUser,
+      bonusExpiryDays,
+      enabled
+    });
+
+    res.json({ code: 200, data: config });
+  } catch (err: any) {
+    console.error(err);
+    res.status(500).json({ code: 500, error: err.message });
+  }
+});
+
+// Get user's referral bonuses
+router.get("/users/:id/referral-bonuses", isAdmin, async (req, res) => {
+  try {
+    const userId = parseInt(req.params.id);
+    const bonuses = await getUserReferralBonuses(userId);
+    res.json({ code: 200, data: bonuses });
+  } catch (err: any) {
+    console.error(err);
+    res.status(500).json({ code: 500, error: err.message });
+  }
+});
+
+// Get all referral bonuses with pagination
+router.get("/referral-bonuses", isAdmin, async (req, res) => {
+  try {
+    const page = parseInt(req.query.page as string) || 1;
+    const pageSize = parseInt(req.query.pageSize as string) || 20;
+    const status = req.query.status as string;
+    const userId = req.query.userId ? parseInt(req.query.userId as string) : undefined;
+
+    const skip = (page - 1) * pageSize;
+
+    const where: any = {};
+    if (status) where.status = status;
+    if (userId) where.userId = userId;
+
+    const [bonuses, total] = await Promise.all([
+      prisma.referralBonus.findMany({
+        where,
+        include: {
+          user: { select: { id: true, email: true, name: true } },
+          fromUser: { select: { id: true, email: true, name: true } }
+        },
+        orderBy: { createdAt: "desc" },
+        skip,
+        take: pageSize,
+      }),
+      prisma.referralBonus.count({ where })
+    ]);
+
+    res.json({
+      code: 200,
+      data: {
+        bonuses,
+        pagination: {
+          page,
+          pageSize,
+          total,
+          totalPages: Math.ceil(total / pageSize)
+        }
+      }
+    });
+  } catch (err: any) {
+    console.error(err);
+    res.status(500).json({ code: 500, error: err.message });
+  }
+});
+
+// Expire old referral bonuses
+router.post("/referral-bonuses/expire", isAdmin, async (req, res) => {
+  try {
+    const expiredCount = await expireOldBonuses();
+    res.json({ code: 200, message: `Expired ${expiredCount} old bonuses` });
+  } catch (err: any) {
+    console.error(err);
+    res.status(500).json({ code: 500, error: err.message });
+  }
+});
+
+// Get referral statistics
+router.get("/referral-stats", isAdmin, async (req, res) => {
+  try {
+    const [
+      totalBonuses,
+      totalAmount,
+      pendingBonuses,
+      paidBonuses,
+      expiredBonuses,
+      topReferrers
+    ] = await Promise.all([
+      prisma.referralBonus.count(),
+      prisma.referralBonus.aggregate({
+        _sum: { amount: true }
+      }),
+      prisma.referralBonus.count({ where: { status: "pending" } }),
+      prisma.referralBonus.count({ where: { status: "paid" } }),
+      prisma.referralBonus.count({ where: { status: "expired" } }),
+      prisma.referralBonus.groupBy({
+        by: ['userId'],
+        _sum: { amount: true },
+        _count: { id: true },
+        orderBy: { _sum: { amount: 'desc' } },
+        take: 10
+      })
+    ]);
+
+    // Get user details for top referrers
+    const topReferrersWithDetails = await Promise.all(
+      topReferrers.map(async (referrer) => {
+        const user = await prisma.user.findUnique({
+          where: { id: referrer.userId },
+          select: { id: true, email: true, name: true }
+        });
+        return {
+          ...referrer,
+          user
+        };
+      })
+    );
+
+    res.json({
+      code: 200,
+      data: {
+        totalBonuses,
+        totalAmount: totalAmount._sum.amount || 0,
+        pendingBonuses,
+        paidBonuses,
+        expiredBonuses,
+        topReferrers: topReferrersWithDetails
+      }
+    });
+  } catch (err: any) {
+    console.error(err);
+    res.status(500).json({ code: 500, error: err.message });
   }
 });
 

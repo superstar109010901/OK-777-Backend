@@ -6,6 +6,7 @@ import {
     getUserBets,
     withdrawRequest
 } from '../db/wallets';
+import { getWithdrawRates, convert } from '../utils/exchange';
 import { convertReferralBonusToPayout } from '../db/bonus';
 import isAuthenticated from '../utils/jwt';
 import { BetBigSmall } from '../games/bigSmall';
@@ -71,7 +72,7 @@ router.get<{}, {}>('/bets', isAuthenticated, async (req, res) => {
             data: bets
         });
     } catch (err) {
-        res.status(400).json({ message: err.toString(), code: 400 });
+        res.status(400).json({ message: err, code: 400 });
     }
 
 });
@@ -104,16 +105,27 @@ router.post<{}, {}>('/withdraw', isAuthenticated, async (req, res) => {
         });
         return;
     }
-    if (!body.amountUsd) {
+    if (!body.amount && !body.amountUsd) {
         res.status(400).send({
-            message: 'amountUsd parametr required',
+            message: 'amount or amountUsd parametr required',
             code: 400
         });
         return;
     }
 
     try {
-        await withdrawRequest(id, body.to, body.currency, body.blockchain, body.amountUsd);
+        // Support either crypto amount (amount) or USD amount (amountUsd)
+        let amount = body.amount;
+        if (!amount && body.amountUsd) {
+            const amountUsdNum = Number(body.amountUsd);
+            if (!isFinite(amountUsdNum) || amountUsdNum <= 0) {
+                return res.status(400).json({ message: 'Invalid amountUsd', code: 400 });
+            }
+            // Convert USD to the requested crypto amount
+            amount = await convert(amountUsdNum, 'USD', body.currency);
+        }
+
+        await withdrawRequest(id, body.to, body.currency, body.blockchain, amount);
         res.json({
             code: 200,
             message: "Ok"
@@ -122,6 +134,19 @@ router.post<{}, {}>('/withdraw', isAuthenticated, async (req, res) => {
         res.status(400).json({ message: err.toString(), code: 400 });
     }
 
+});
+
+router.get<{}, {}>('/withdraw-rates', isAuthenticated, async (req, res) => {
+    try {
+        const rates = await getWithdrawRates();
+        res.json({
+            code: 200,
+            message: 'Ok',
+            data: rates
+        });
+    } catch (err) {
+        res.status(400).json({ message: err.toString(), code: 400 });
+    }
 });
 
 router.post<{}, {}>('/exchange', isAuthenticated, async (req, res) => {
@@ -161,7 +186,7 @@ router.post<{}, {}>('/exchange', isAuthenticated, async (req, res) => {
             message: 'Ok'
         });
     } catch (err) {
-        res.status(400).json({ message: err.toString(), code: 400 });
+        res.status(400).json({ message: err, code: 400 });
     }
 
 });
@@ -215,7 +240,7 @@ router.post<{}, {}>('/bet', isAuthenticated, async (req, res) => {
         });
 
     } catch (err) {
-        res.status(400).json({ message: err.toString(), code: 400 });
+        res.status(400).json({ message: err, code: 400 });
     }
 
 });

@@ -88,7 +88,7 @@ export const BetOddEven = async (amount: number, token: string, userId: number) 
         where: { userId_currency: { userId, currency: token } },
     });
 
-    if (!fromBalance || fromBalance.amount.toNumber() < amount) {
+    if (!fromBalance || Number(fromBalance.amount) < amount) {
         throw new Error('Insufficient balance');
     }
 

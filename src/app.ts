@@ -13,6 +13,8 @@ import { Server } from "socket.io";
 require('dotenv').config();
 
 const app = express();
+// Honor reverse proxy headers for correct protocol/host in OAuth flows
+app.set('trust proxy', true);
 
 // app.use(morgan('dev'));
 // app.use(helmet());
@@ -54,6 +56,14 @@ app.get<{}, MessageResponse>('/', (req, res) => {
   });
 });
 
+app.get('/health', (req, res) => {
+  res.status(200).json({
+    status: 'OK',
+    timestamp: new Date().toISOString(),
+    uptime: process.uptime()
+  });
+});
+
 app.use('/api/v1', api);
 app.use('/v1/api/seamless', seamless);
 app.use(middlewares.notFound);
@@ -83,13 +93,15 @@ if (process.env.ENABLE_GAMES === "true") {
   startGames();
 }
 
-const server = http.createServer(app);
+// Start referral bonus scheduler
+// eslint-disable-next-line @typescript-eslint/no-var-requires
+const { startReferralBonusScheduler } = require("./utils/referralScheduler");
+startReferralBonusScheduler();
 
-export const io = new Server(server, {
+export const io = new Server({
   cors: {
     origin: "*",
   },
 });
-
 
 export default app;

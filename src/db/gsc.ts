@@ -1,7 +1,7 @@
 import prisma from "./prisma";
 import { supabase } from "./supabase";
 
-function isNumeric(num) {
+function isNumeric(num: any): boolean {
   return !isNaN(num)
 }
 
@@ -12,7 +12,7 @@ export const getUserBalancesBulk = async (batchRequests: any[], currency: string
     const cleanedCurrency = currency.replace(/2/g, '');
     const ratio = currency.includes('2');
 
-    const accounts = []
+    const accounts: number[] = []
 
     batchRequests.map(r => {
       if (isNumeric(r.member_account))
@@ -90,7 +90,7 @@ export const getUserBalancesBulk = async (batchRequests: any[], currency: string
 
 }
 
-export const saveWager = async (tx: any, userId: number, wagerData: any, currency: string = null) => {
+export const saveWager = async (tx: any, userId: number, wagerData: any, currency: string | null = null) => {
 
   try {
     return tx.wager.upsert({
@@ -181,7 +181,7 @@ export const processWithdraw = async (memberAccount: string, currency: string, w
 
   if (isNaN(userId)) throw new Error("Invalid userId");
 
-  return prisma.$transaction(async (tx) => {
+  return prisma.$transaction(async (tx: any) => {
     const balance = await getBalance(userId, currency);
     if (!balance) throw new Error("Balance not found");
 
@@ -234,7 +234,7 @@ export const processDeposit = async (memberAccount: string, currency: string, wa
   const userId = parseInt(memberAccount);
   if (isNaN(userId)) throw new Error("Invalid userId");
 
-  return prisma.$transaction(async (tx) => {
+  return prisma.$transaction(async (tx: any) => {
     const balance = await getBalance(userId, currency);
     if (!balance) throw new Error("Balance not found");
 
@@ -309,7 +309,7 @@ export const processPushBet = async (wager: any) => {
 
   const userId = parseInt(wager.member_account);
 
-  return prisma.$transaction(async (tx) => {
+  return prisma.$transaction(async (tx: any) => {
     const balance = await getBalance(userId, wager.currency);
     if (!balance) throw new Error("Balance not found");
 

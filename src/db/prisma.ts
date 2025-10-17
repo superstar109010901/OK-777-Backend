@@ -20,6 +20,8 @@ const modelToTable: Record<string, string> = {
   withdrawRequest: 'WithdrawRequests',
   product: 'Product',
   emailVerificationCode: 'EmailVerificationCodes',
+  referralBonus: 'ReferralBonuses',
+  referralConfig: 'ReferralConfigs',
 };
 
 function applyWhere(q: any, where?: Where) {
@@ -34,14 +36,20 @@ function applyWhere(q: any, where?: Where) {
           const txt = `%${val.contains}%`;
           parts.push(`${key}.ilike.${txt}`);
         } else if (typeof val === 'object' && val && 'equals' in val) {
-          parts.push(`${key}.eq.${val.equals}`);
+          const eqVal = val.equals instanceof Date ? val.equals.toISOString() : val.equals;
+          parts.push(`${key}.eq.${eqVal}`);
         } else if (typeof val === 'object' && val && ('gte' in val || 'lte' in val || 'gt' in val || 'lt' in val)) {
-          if ('gte' in val) parts.push(`${key}.gte.${val.gte}`);
-          if ('lte' in val) parts.push(`${key}.lte.${val.lte}`);
-          if ('gt' in val) parts.push(`${key}.gt.${val.gt}`);
-          if ('lt' in val) parts.push(`${key}.lt.${val.lt}`);
+          const gte = 'gte' in val ? (val.gte instanceof Date ? val.gte.toISOString() : val.gte) : undefined;
+          const lte = 'lte' in val ? (val.lte instanceof Date ? val.lte.toISOString() : val.lte) : undefined;
+          const gt = 'gt' in val ? (val.gt instanceof Date ? val.gt.toISOString() : val.gt) : undefined;
+          const lt = 'lt' in val ? (val.lt instanceof Date ? val.lt.toISOString() : val.lt) : undefined;
+          if (gte !== undefined) parts.push(`${key}.gte.${gte}`);
+          if (lte !== undefined) parts.push(`${key}.lte.${lte}`);
+          if (gt !== undefined) parts.push(`${key}.gt.${gt}`);
+          if (lt !== undefined) parts.push(`${key}.lt.${lt}`);
         } else {
-          parts.push(`${key}.eq.${val}`);
+          const prim = val instanceof Date ? val.toISOString() : val;
+          parts.push(`${key}.eq.${prim}`);
         }
       }
     }
@@ -51,26 +59,34 @@ function applyWhere(q: any, where?: Where) {
     if (key === 'OR') continue;
     const val = where[key];
     if (val && typeof val === 'object' && 'in' in val) {
-      q = q.in(key, val.in);
+      const arr = Array.isArray(val.in) ? val.in.map((v: any) => v instanceof Date ? v.toISOString() : v) : val.in;
+      q = q.in(key, arr);
     } else if (val && typeof val === 'object' && ('gte' in val || 'lte' in val || 'gt' in val || 'lt' in val || 'equals' in val)) {
-      if ('equals' in val) q = q.eq(key, val.equals);
-      if ('gte' in val) q = q.gte(key, val.gte);
-      if ('lte' in val) q = q.lte(key, val.lte);
-      if ('gt' in val) q = q.gt(key, val.gt);
-      if ('lt' in val) q = q.lt(key, val.lt);
+      const eqVal = 'equals' in val ? (val.equals instanceof Date ? val.equals.toISOString() : val.equals) : undefined;
+      const gteVal = 'gte' in val ? (val.gte instanceof Date ? val.gte.toISOString() : val.gte) : undefined;
+      const lteVal = 'lte' in val ? (val.lte instanceof Date ? val.lte.toISOString() : val.lte) : undefined;
+      const gtVal = 'gt' in val ? (val.gt instanceof Date ? val.gt.toISOString() : val.gt) : undefined;
+      const ltVal = 'lt' in val ? (val.lt instanceof Date ? val.lt.toISOString() : val.lt) : undefined;
+      if (eqVal !== undefined) q = q.eq(key, eqVal);
+      if (gteVal !== undefined) q = q.gte(key, gteVal);
+      if (lteVal !== undefined) q = q.lte(key, lteVal);
+      if (gtVal !== undefined) q = q.gt(key, gtVal);
+      if (ltVal !== undefined) q = q.lt(key, ltVal);
     } else if (key.includes('_')) {
       // Composite unique like userId_currency
       const obj = where[key];
       if (obj && typeof obj === 'object') {
         for (const subKey of Object.keys(obj)) {
-          q = q.eq(subKey, obj[subKey]);
+          const subVal = obj[subKey] instanceof Date ? obj[subKey].toISOString() : obj[subKey];
+          q = q.eq(subKey, subVal);
         }
       }
     } else if (val && typeof val === 'object' && 'contains' in val) {
       const txt = `%${val.contains}%`;
       q = q.ilike(key, txt);
     } else {
-      q = q.eq(key, val);
+      const prim = val instanceof Date ? val.toISOString() : val;
+      q = q.eq(key, prim);
     }
   }
   return q;
@@ -87,6 +103,13 @@ function applyOrderSkipTake(q: any, orderBy?: any, skip?: number, take?: number)
     const to = (skip || 0) + (take ? take - 1 : 999999);
     q = q.range(from, to);
   }
+  if (Array.isArray(orderBy)) {
+    for (const ob of orderBy) {
+      const k = Object.keys(ob)[0];
+      const dir = ob[k] === 'desc' ? { ascending: false } : { ascending: true };
+      q = q.order(k, dir);
+    }
+  }
   return q;
 }
 
@@ -95,6 +118,24 @@ function remapKeyForModel(model: string, key: string): string {
   if (model === 'emailVerificationCode') {
     if (key === 'expiresAt') return 'expires_at';
     if (key === 'createdAt') return 'created_at';
+  }
+  if (model === 'referralBonus') {
+    if (key === 'userId') return 'userId';
+    if (key === 'fromUserId') return 'fromUserId';
+    if (key === 'triggerType') return 'triggerType';
+    if (key === 'expiresAt') return 'expiresAt';
+    if (key === 'createdAt') return 'createdAt';
+    if (key === 'updatedAt') return 'updatedAt';
+  }
+  if (model === 'referralConfig') {
+    if (key === 'depositBonusPercent') return 'depositBonusPercent';
+    if (key === 'betBonusPercent') return 'betBonusPercent';
+    if (key === 'firstDepositBonus') return 'firstDepositBonus';
+    if (key === 'firstBetBonus') return 'firstBetBonus';
+    if (key === 'signupBonus') return 'signupBonus';
+    if (key === 'maxBonusPerUser') return 'maxBonusPerUser';
+    if (key === 'bonusExpiryDays') return 'bonusExpiryDays';
+    if (key === 'updatedAt') return 'updatedAt';
   }
   return key;
 }
@@ -105,7 +146,11 @@ function remapObjectKeysForModel(model: string, obj: any): any {
   for (const k of Object.keys(obj)) {
     const v = obj[k];
     const newKey = remapKeyForModel(model, k);
-    output[newKey] = v;
+    if (v instanceof Date) {
+      output[newKey] = v.toISOString();
+    } else {
+      output[newKey] = v;
+    }
   }
   return output;
 }
@@ -190,12 +235,17 @@ function tableApi(model: string) {
       return data;
     },
     async updateMany(args: any) {
-      let q = supabase.from(table).update(args.data);
-      const remappedWhere = remapWhereForModel(model, args.where);
-      q = applyWhere(q, remappedWhere);
-      const { error } = await q;
-      if (error) throw error;
-      return { count: 1 } as any;
+      try {
+        let q = supabase.from(table).update(args.data);
+        const remappedWhere = remapWhereForModel(model, args.where);
+        q = applyWhere(q, remappedWhere);
+        const { data, error } = await q.select('*');
+        if (error) throw error;
+        return { count: data ? data.length : 0 };
+      } catch (error) {
+        console.error(`Error in updateMany for ${model}:`, error);
+        throw error;
+      }
     },
     async delete(args: any) {
       let q = supabase.from(table).delete();
@@ -211,6 +261,53 @@ function tableApi(model: string) {
         return this.update({ where: args.where, data: args.update });
       }
       return this.create({ data: args.create });
+    },
+    async groupBy(args: any) {
+      // Simple groupBy implementation for referral stats
+      const { by, _sum, _count, orderBy, take } = args;
+      let q = supabase.from(table).select(`${by.join(',')}, ${Object.keys(_sum || {})[0] || 'id'}`);
+      
+      if (orderBy) {
+        const col = Object.keys(orderBy)[0];
+        const dir = orderBy[col] === 'desc' ? { ascending: false } : { ascending: true };
+        q = q.order(col, dir);
+      }
+      
+      if (take) {
+        q = q.limit(take);
+      }
+      
+      const { data, error } = await q;
+      if (error) throw error;
+      
+      // Group the results
+      const grouped: any = {};
+      (data || []).forEach((row: any) => {
+        const key = by.map((field: string) => row[field]).join('|');
+        if (!grouped[key]) {
+          grouped[key] = {};
+          by.forEach((field: string) => {
+            grouped[key][field] = row[field];
+          });
+          if (_sum) {
+            const sumField = Object.keys(_sum)[0];
+            grouped[key]._sum = { [sumField]: 0 };
+          }
+          if (_count) {
+            grouped[key]._count = { id: 0 };
+          }
+        }
+        
+        if (_sum) {
+          const sumField = Object.keys(_sum)[0];
+          grouped[key]._sum[sumField] += Number(row[sumField] || 0);
+        }
+        if (_count) {
+          grouped[key]._count.id += 1;
+        }
+      });
+      
+      return Object.values(grouped);
     },
   };
 }

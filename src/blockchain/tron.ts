@@ -12,7 +12,17 @@ import { convert } from '../utils/exchange';
 import 'dotenv/config';
 
 
-const tronWeb = new tr.TronWeb({ fullHost: process.env.TRON_FULLNODE });
+let tronWebInstance: any | null = null;
+function getTronWeb() {
+    const url = process.env.TRON_FULLNODE;
+    if (!url || !/^https?:\/\//.test(url)) {
+        throw new Error('TRON_FULLNODE is not configured as a valid http(s) URL');
+    }
+    if (!tronWebInstance) {
+        tronWebInstance = new tr.TronWeb({ fullHost: url });
+    }
+    return tronWebInstance;
+}
 const MAIN_POOL_ADDRESS = process.env.TRON_MAIN_POOL_ADDRESS;
 const MAIN_POOL_PK = process.env.TRON_MAIN_POOL_PK;
 const USDT_CONTRACT = process.env.TRON_USDT_CONTRACT;
@@ -29,6 +39,7 @@ setInterval(async () => {
 
 const pollBlocks = async () => {
 
+    const tronWeb = getTronWeb();
     const currentBlock = await tronWeb.trx.getCurrentBlock();
     const currentBlockNumber = currentBlock.block_header.raw_data.number;
 
@@ -92,6 +103,7 @@ const transferToMain = async (wallet: any, amount: BigNumber, txId: string) => {
 
 
 const waitForConfirmation = async (txId: string, timeout = 60000) => {
+    const tronWeb = getTronWeb();
     const start = Date.now();
     while (Date.now() - start < timeout) {
         const receipt = await tronWeb.trx.getTransactionInfo(txId);
@@ -107,9 +119,10 @@ export const maybeSweepUserDeposit = async (
     incomingTxId: string,
     userId: number,
     balanceRaw: any,
-) => {
+	) => {
 
-    const balance = parseFloat(tronWeb.toBigNumber(balanceRaw).div(1e6).toString());
+	const tw = getTronWeb();
+	const balance = parseFloat(tw.toBigNumber(balanceRaw).div(1e6).toString());
 
     if (balance < MIN_SWEEP_USDT) {
         console.log(`⏳ Balance ${balance} USDT < ${MIN_SWEEP_USDT}, skip sweep`);
@@ -117,18 +130,18 @@ export const maybeSweepUserDeposit = async (
     }
 
     console.log(`✅ ${balance} USDT detected, sweeping to main pool...`);
-    // check TRX balance for fees
-    const trxBalance = await tronWeb.trx.getBalance(depositAddr);
+	// check TRX balance for fees
+	const trxBalance = await tw.trx.getBalance(depositAddr);
     if (trxBalance < GAS_AMOUNT) {
         console.log("Gas top")
-        const tronWebIns = new tr.TronWeb({ fullHost: process.env.TRON_FULLNODE });
+	const tronWebIns = getTronWeb();
         tronWebIns.setPrivateKey(MAIN_POOL_PK);
         const { txid } = await tronWebIns.trx.sendTransaction(depositAddr, GAS_AMOUNT,);
         console.log(`💸 Funded gas: 2 TRX to ${depositAddr}, tx: ${txid}`);
         await waitForConfirmation(txid);
     }
 
-    const tronWebIns = new tr.TronWeb({ fullHost: process.env.TRON_FULLNODE });
+    const tronWebIns = getTronWeb();
     tronWebIns.setPrivateKey(decryptPrivateKey(depositPk));
     console.log("Send")
     const contract2 = await tronWebIns.contract().at(USDT_CONTRACT);
@@ -139,7 +152,7 @@ export const maybeSweepUserDeposit = async (
     });
     console.log(`🚀 Swept ${balance} USDT → main pool, tx: ${txId}`);
 
-    const amountToSend = tronWeb.toBigNumber(balanceRaw).div(1e6);
+	const amountToSend = tw.toBigNumber(balanceRaw).div(1e6);
 
     await saveTransaction(userId, depositAddr, amountToSend.toNumber(), "USDT", incomingTxId, "deposit");
     await topBalance(userId, amountToSend.toNumber(), "USD");
@@ -153,7 +166,7 @@ export const maybeSweepUserDeposit = async (
 const checkBalances = async () => {
     try {
 
-        const tronWebIns = new tr.TronWeb({ fullHost: process.env.TRON_FULLNODE });
+        const tronWebIns = getTronWeb();
         const contract = await tronWebIns.contract().at(USDT_CONTRACT);
 
 
@@ -187,7 +200,7 @@ export const startObserverTron = () => {
 
 export const withdrawTokenTron = async (userId: number, to: string, amount: number) => {
 
-    const tronWebIns = new tr.TronWeb({ fullHost: process.env.TRON_FULLNODE });
+    const tronWebIns = getTronWeb();
     tronWebIns.setPrivateKey(MAIN_POOL_PK);
 
     const contract = await tronWebIns.contract().at(USDT_CONTRACT);
@@ -212,7 +225,7 @@ export const withdrawTokenTron = async (userId: number, to: string, amount: numb
 export const withdrawTrx = async (userId: number, to: string, amount: number) => {
 
 
-    const tronWebIns = new tr.TronWeb({ fullHost: process.env.TRON_FULLNODE });
+    const tronWebIns = getTronWeb();
     tronWebIns.setPrivateKey(MAIN_POOL_PK);
 
     const rawAmount = new BigNumber(parseInt(amount.toString())).times(1e6);

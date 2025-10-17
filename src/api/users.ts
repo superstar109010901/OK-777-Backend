@@ -8,39 +8,28 @@ import {
     setAvatar,
     createEmailVerificationCode,
     verifyEmailCode,
+    requestEmailVerificationByEmail,
+    verifyEmailCodeByEmail,
     changePassword,
     setName,
     setPhone,
     getUserTeamByReferralCode
 } from '../db/users';
+import { getUserReferralBonuses } from '../db/bonus';
 import isAuthenticated from '../utils/jwt';
 import fs from "fs";
 import path from "path";
 import { sendEmail } from "../utils/email";
 import passport from "../auth/passport";
+import { validateSignup, validateSignin, validateTelegram, validateUsername } from '../middlewares/validation';
 import 'dotenv/config';
 const jwt = require('jsonwebtoken');
 
 const router = express.Router();
 
-router.post<{}, {}>('/signup', async (req, res) => {
+router.post<{}, {}>('/signup', validateSignup, async (req, res) => {
 
     const body = req.body;
-
-    if (!body.email) {
-        res.status(400).send({
-            message: 'email parametr required',
-            code: 400
-        });
-        return;
-    }
-    if (!body.password) {
-        res.status(400).send({
-            message: 'password parametr required',
-            code: 400
-        });
-        return;
-    }
 
     try {
         await register(body.email, body.password, body.referralCode);
@@ -48,36 +37,21 @@ router.post<{}, {}>('/signup', async (req, res) => {
             code: 200,
             message: 'Ok',
         });
-    } catch (err) {
+    } catch (err: any) {
         res.status(400).json({ message: err.toString(), code: 400 });
     }
 
 });
 
-router.post<{}, {}>('/signin', async (req, res) => {
+router.post<{}, {}>('/signin', validateSignin, async (req, res) => {
 
     const body = req.body;
-
-    if (!body.email) {
-        res.status(400).send({
-            message: 'email parametr required',
-            code: 400
-        });
-        return;
-    }
-    if (!body.password) {
-        res.status(400).send({
-            message: 'password parametr required',
-            code: 400
-        });
-        return;
-    }
 
     try {
         const token = await login(body.email, body.password);
 
         res.json({ code: 200, data: { token } });
-    } catch (err) {
+    } catch (err: any) {
         res.status(400).json({ message: err.toString() });
     }
 
@@ -85,7 +59,7 @@ router.post<{}, {}>('/signin', async (req, res) => {
 
 router.get<{}, {}>('/profile', isAuthenticated, async (req, res) => {
 
-    let id = req['token'].id;
+    let id = (req as any)["token"].id;
 
     try {
 
@@ -96,7 +70,7 @@ router.get<{}, {}>('/profile', isAuthenticated, async (req, res) => {
             data: profile
         });
 
-    } catch (err) {
+    } catch (err: any) {
         res.status(400).json({ code: 400, message: err.toString() });
     }
 
@@ -104,7 +78,7 @@ router.get<{}, {}>('/profile', isAuthenticated, async (req, res) => {
 
 router.get<{}, {}>('/referal-info', isAuthenticated, async (req, res) => {
 
-    let id = req['token'].id;
+    let id = (req as any)["token"].id;
 
     try {
 
@@ -115,31 +89,43 @@ router.get<{}, {}>('/referal-info', isAuthenticated, async (req, res) => {
             data: info
         });
 
-    } catch (err) {
+    } catch (err: any) {
         res.status(400).json({ code: 400, message: err.toString() });
     }
 
 });
 
-router.post<{}, {}>('/set-telegram', isAuthenticated, async (req, res) => {
+router.get<{}, {}>('/referral-bonuses', isAuthenticated, async (req, res) => {
 
-    let id = req['token'].id;
+    let id = (req as any)["token"].id;
+
+    try {
+
+        const bonuses = await getUserReferralBonuses(id);
+        res.json({
+            code: 200,
+            message: "Ok",
+            data: bonuses
+        });
+
+    } catch (err: any) {
+        res.status(400).json({ code: 400, message: err.toString() });
+    }
+
+});
+
+router.post<{}, {}>('/set-telegram', isAuthenticated, validateTelegram, async (req, res) => {
+
+    let id = (req as any)["token"].id;
 
     const body = req.body;
 
-    if (!body.telegram) {
-        res.status(400).send({
-            code: 400,
-            message: 'telegram parametr required',
-        });
-        return;
-    }
     try {
         await setTelegram(id, body.telegram);
 
         res.json({ message: "Ok", code: 200 });
 
-    } catch (err) {
+    } catch (err: any) {
         res.status(400).json({ message: err.toString() });
     }
 
@@ -147,7 +133,7 @@ router.post<{}, {}>('/set-telegram', isAuthenticated, async (req, res) => {
 
 router.post<{}, {}>('/set-withdrawal-password', isAuthenticated, async (req, res) => {
 
-    let id = req['token'].id;
+    let id = (req as any)["token"].id;
 
     const body = req.body;
 
@@ -162,7 +148,7 @@ router.post<{}, {}>('/set-withdrawal-password', isAuthenticated, async (req, res
         await setWithdrawPassword(id, body.password);
 
         res.json({ message: "Ok", code: 200 });
-    } catch (err) {
+    } catch (err: any) {
         res.status(400).json({ message: err.toString() });
     }
 
@@ -170,7 +156,7 @@ router.post<{}, {}>('/set-withdrawal-password', isAuthenticated, async (req, res
 
 router.post<{}, {}>('/set-avatar', isAuthenticated, async (req, res) => {
 
-    let id = req['token'].id;
+    let id = (req as any)["token"].id;
 
     const { imageBase64 } = req.body;
 
@@ -206,7 +192,7 @@ router.post<{}, {}>('/set-avatar', isAuthenticated, async (req, res) => {
         await setAvatar(id, webPath);
 
         res.json({ message: "Ok", code: 200, data: { path: webPath, url: absoluteUrl } });
-    } catch (err) {
+    } catch (err: any) {
         res.status(400).json({ message: err.toString() });
     }
 
@@ -214,53 +200,47 @@ router.post<{}, {}>('/set-avatar', isAuthenticated, async (req, res) => {
 
 router.post<{}, {}>('/verify-email', isAuthenticated, async (req, res) => {
 
-    let id = req['token'].id;
-    console.log(id);
-    
+    let id = (req as any)["token"].id;
 
     try {
-
         const data = await createEmailVerificationCode(id);
-        console.log("data=>", data);
-        
-        await sendEmail(data.email, "Email verification code", data.code);
-
-        res.json({ message: "Ok", code: 200 });
-    } catch (err) {
-        res.status(400).json({ message: err.toString() });
+        await sendEmail(data.email, "OK777 Email Verification Code", data.code);
+        console.log(`[OK777] Verification code sent to ${data.email}`);
+        res.json({ success: true, message: "Verification code sent" });
+    } catch (err: any) {
+        res.status(400).json({ success: false, message: err.toString() });
     }
 
 });
 
 router.post<{}, {}>('/confirm-email-code', isAuthenticated, async (req, res) => {
 
-    let id = req['token'].id;
+    let id = (req as any)["token"].id;
 
     const body = req.body;
 
-    if (!body.code) {
-        res.status(400).send({
-            code: 400,
-            message: 'code parametr required',
-        });
+    if (!body.code || !/^\d{6}$/.test(body.code)) {
+        res.status(400).json({ success: false, message: 'Invalid code' });
         return;
     }
 
     try {
         await verifyEmailCode(id, body.code);
-
-        res.json({ message: "Ok", code: 200 });
-
-    } catch (err) {
-        res.status(400).json({ message: err.toString(), code: 400 });
+        console.log(`[OK777] Email verified for user ${id}`);
+        res.json({ success: true, message: "Verification successful" });
+    } catch (err: any) {
+        res.status(400).json({ success: false, message: err.toString() });
     }
 
 });
 
+// Public style API (consistent with other routes style) to support external email verification flow
+// Public endpoints removed to align with documented API: use JWT-protected
+
 
 router.post<{}, {}>('/change-password', isAuthenticated, async (req, res) => {
 
-    let id = req['token'].id;
+    let id = (req as any)["token"].id;
 
     const body = req.body;
 
@@ -286,31 +266,24 @@ router.post<{}, {}>('/change-password', isAuthenticated, async (req, res) => {
 
         res.json({ message: "Ok", code: 200 });
 
-    } catch (err) {
+    } catch (err: any) {
         res.status(400).json({ message: err.toString(), code: 400 });
     }
 
 });
 
 
-router.post<{}, {}>('/set-name', isAuthenticated, async (req, res) => {
+router.post<{}, {}>('/set-name', isAuthenticated, validateUsername, async (req, res) => {
 
-    let id = req['token'].id;
+    let id = (req as any)["token"].id;
 
     const body = req.body;
 
-    if (!body.name) {
-        res.status(400).send({
-            code: 400,
-            message: 'name parametr required',
-        });
-        return;
-    }
     try {
-        await setName(id, body.name);
+        await setName(id, body.username);
 
-        res.json({ message: "Ok", code: 200, data: { name: body.name } });
-    } catch (err) {
+        res.json({ message: "Ok", code: 200, data: { name: body.username } });
+    } catch (err: any) {
         res.status(400).json({ message: err.toString() });
     }
 
@@ -318,7 +291,7 @@ router.post<{}, {}>('/set-name', isAuthenticated, async (req, res) => {
 
 router.post<{}, {}>('/set-phone', isAuthenticated, async (req, res) => {
 
-    let id = req['token'].id;
+    let id = (req as any)["token"].id;
 
     const body = req.body;
 
@@ -333,41 +306,64 @@ router.post<{}, {}>('/set-phone', isAuthenticated, async (req, res) => {
         await setPhone(id, body.phone);
 
         res.json({ message: "Ok", code: 200 });
-    } catch (err) {
+    } catch (err: any) {
         res.status(400).json({ code: 400, message: err.toString() });
     }
 
 });
 
-router.get("/auth/google/callback", passport.authenticate("google", { session: false, failureRedirect: "/" }), (req, res) => {
+router.get("/auth/google/callback", passport.authenticate("google", { session: false, failureRedirect: "/" }), async (req, res) => {
+    try {
+        const user = req.user as any;
+        
+        if (!user || !user.id) {
+            console.error("OAuth callback: No user data received");
+            return res.status(400).json({ 
+                code: 400, 
+                message: "OAuth authentication failed - no user data" 
+            });
+        }
 
-    const user = req.user as any;
-    const token = jwt.sign(
-        {
-            id: user.id,
-            provider: user.provider,
-            displayName: user.displayName,
-            emails: user.emails,
-        },
-        process.env.JWTPRIVATEKEY as string,
-        { expiresIn: "1h" }
-    );
+        const token = jwt.sign(
+            {
+                id: user.id,
+                provider: user.provider,
+                displayName: user.displayName,
+                emails: user.emails,
+            },
+            process.env.JWTPRIVATEKEY as string,
+            { expiresIn: "1h" }
+        );
 
-    // If FRONTEND redirect url is configured, redirect with token for SPA consumption
-    const frontendBase = process.env.GOOGLE_OAUTH_REDIRECT_FRONTEND || process.env.FRONTEND_URL;
-    if (frontendBase) {
-        const redirectUrl = `${frontendBase.replace(/\/$/, "")}/auth/google/callback?token=${encodeURIComponent(token)}`;
-        return res.redirect(302, redirectUrl);
+        console.log(`OAuth success: User ${user.id} authenticated via Google`);
+
+        // If FRONTEND redirect url is configured, redirect with token for SPA consumption
+        const frontendBase = process.env.GOOGLE_OAUTH_REDIRECT_FRONTEND || process.env.FRONTEND_URL;
+        if (frontendBase) {
+            const redirectUrl = `${frontendBase.replace(/\/$/, "")}/auth/google/callback?token=${encodeURIComponent(token)}`;
+            console.log(`OAuth redirecting to: ${redirectUrl}`);
+            return res.redirect(302, redirectUrl);
+        }
+
+        // Fallback: return JSON (useful for direct API testing)
+        res.json({ code: 200, data: { token } });
+
+    } catch (err: any) {
+        console.error("OAuth callback error:", err);
+        res.status(500).json({ 
+            code: 500, 
+            message: "OAuth callback processing failed", 
+            error: err.toString() 
+        });
     }
-
-    // Fallback: return JSON (useful for direct API testing)
-    res.json({ code: 200, data: { token } });
-
-}
-);
+});
 
 // Google OAuth entry point (redirects to Google)
-router.get("/auth/google", passport.authenticate("google", { scope: ["profile", "email"], session: false }));
+router.get("/auth/google", (req, res, next) => {
+    console.log(`OAuth initiation: ${req.protocol}://${req.get('host')}${req.originalUrl}`);
+    console.log(`Expected callback: ${req.protocol}://${req.get('host')}/api/v1/users/auth/google/callback`);
+    passport.authenticate("google", { scope: ["profile", "email"], session: false })(req, res, next);
+});
 
 
 export default router;

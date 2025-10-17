@@ -180,10 +180,26 @@ create table if not exists "ReferralBonuses" (
   amount integer not null,
   currency text not null,
   status text not null default 'pending',
+  triggerType text not null default 'deposit',
+  expiresAt timestamptz,
   createdAt timestamptz not null default now(),
   updatedAt timestamptz not null default now(),
   constraint referral_to_fk foreign key (userId) references "Users"(id),
   constraint referral_from_fk foreign key (fromUserId) references "Users"(id)
+);
+
+-- ReferralConfigs
+create table if not exists "ReferralConfigs" (
+  id integer primary key default 1,
+  depositBonusPercent integer not null default 5,
+  betBonusPercent integer not null default 2,
+  firstDepositBonus integer not null default 10,
+  firstBetBonus integer not null default 5,
+  signupBonus integer not null default 5,
+  maxBonusPerUser integer not null default 1000,
+  bonusExpiryDays integer not null default 30,
+  enabled boolean not null default true,
+  updatedAt timestamptz not null default now()
 );
 
 -- Games

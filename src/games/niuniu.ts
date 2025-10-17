@@ -191,7 +191,7 @@ export const BetNuiNui = async (userId: number, amount: number, currency: string
         where: { userId_currency: { userId, currency: currency } },
     });
 
-    if (!fromBalance || fromBalance.amount.toNumber() < amount) {
+    if (!fromBalance || Number(fromBalance.amount) < amount) {
         throw new Error('Insufficient balance');
     }
 

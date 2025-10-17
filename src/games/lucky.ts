@@ -136,7 +136,7 @@ export const BetLucky = async (userId: number, amount: number, currency: string)
         where: { userId_currency: { userId, currency: currency } },
     });
 
-    if (!fromBalance || fromBalance.amount.toNumber() < amount) {
+    if (!fromBalance || Number(fromBalance.amount) < amount) {
         throw new Error('Insufficient balance');
     }
 
@@ -159,6 +159,30 @@ export const BetLucky = async (userId: number, amount: number, currency: string)
             type: 3
         },
     });
+
+    // Trigger referral bonuses for bets
+    try {
+        const { 
+            triggerBetReferralBonus, 
+            triggerFirstBetReferralBonus 
+        } = require('../db/bonus');
+        
+        // Check if this is the user's first bet
+        const existingBets = await prisma.bet.count({
+            where: { userId },
+        });
+
+        // Trigger first bet bonus if this is the first bet
+        if (existingBets === 1) { // 1 because we just created this bet
+            await triggerFirstBetReferralBonus(userId, currency);
+        }
+
+        // Always trigger regular bet bonus
+        await triggerBetReferralBonus(userId, amount, currency);
+    } catch (error) {
+        console.error("Error triggering referral bonuses for bet:", error);
+        // Don't throw error to avoid breaking the bet flow
+    }
 
     if (payout > 0) {
         console.log("win")

@@ -18,7 +18,7 @@ const generateAlphanumericCode = (length: number = 6) => {
 }
 
 
-export const register = async (email: string, password: string, referralCode: string = null) => {
+export const register = async (email: string, password: string, referralCode: string | null = null) => {
     try {
 
         const existingUser = await prisma.user.findUnique({ where: { email } });
@@ -49,8 +49,19 @@ export const register = async (email: string, password: string, referralCode: st
             select: { id: true }
         });
         
-
         await createWallet(user.id);
+
+        // Trigger signup referral bonus if user was referred
+        if (referredById) {
+            try {
+                const { triggerSignupReferralBonus } = require('./bonus');
+                await triggerSignupReferralBonus(user.id, "USD");
+                console.log(`Signup referral bonus triggered for user ${user.id} referred by ${referredById}`);
+            } catch (error) {
+                console.error("Error triggering signup referral bonus:", error);
+                // Don't throw error to avoid breaking registration flow
+            }
+        }
 
     } catch (err) {
         console.log(err);
@@ -154,7 +165,7 @@ export const createEmailVerificationCode = async (userId: number) => {
             throw new Error("User not found");
         }
 
-        const expiresAt = new Date(Date.now() + 15 * 60 * 1000);
+        const expiresAt = new Date(Date.now() + 5 * 60 * 1000);
 
         await prisma.emailVerificationCode.create({
             data: { userId, code, expiresAt },
@@ -167,6 +178,19 @@ export const createEmailVerificationCode = async (userId: number) => {
         throw err;
     }
 
+}
+
+export const requestEmailVerificationByEmail = async (email: string) => {
+    const user = await prisma.user.findUnique({ where: { email } });
+    if (!user) throw new Error("User not found");
+    return await createEmailVerificationCode(user.id);
+}
+
+export const verifyEmailCodeByEmail = async (email: string, code: string) => {
+    const user = await prisma.user.findUnique({ where: { email } });
+    if (!user) throw new Error("User not found");
+    await verifyEmailCode(user.id, code);
+    return true;
 }
 
 export const verifyEmailCode = async (userId: number, code: string) => {
