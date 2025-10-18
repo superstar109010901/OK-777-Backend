@@ -28,6 +28,13 @@ This guide will help you deploy your casino backend application to Render.com.
 - **Start Command**: `npm start`
 - **Health Check Path**: `/health`
 
+### Important Notes
+
+- The build process includes TypeScript compilation
+- Prisma client is automatically generated during the build
+- Security vulnerabilities have been addressed
+- All TypeScript compilation errors have been fixed
+
 ### Environment Variables
 
 Set the following environment variables in your Render dashboard:

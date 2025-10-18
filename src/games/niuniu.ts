@@ -132,7 +132,7 @@ export const startNiuNiu = async () => {
         const block = await tronWeb.trx.getCurrentBlock();
         const blockHash = block.blockID.slice(-8);
         for (const bet of pendingBets) {
-            await processBet(bet.id, bet.token, bet.player, BigNumber(Math.floor(bet.amount * 1_000_000)), blockHash, bet.txHash);
+            await processBet(bet.id, bet.token, bet.player, new BigNumber(Math.floor(bet.amount * 1_000_000)), blockHash, bet.txHash);
         }
     }, 60000);
 
@@ -141,7 +141,7 @@ export const startNiuNiu = async () => {
         const block = await tronWeb.trx.getCurrentBlock();
         const blockHash = block.blockID.slice(-8);
         for (const bet of pendingBets) {
-            await processBet(bet.id, bet.token, bet.player, BigNumber(Math.floor(bet.amount * 1_000_000)), blockHash, bet.txHash);
+            await processBet(bet.id, bet.token, bet.player, new BigNumber(Math.floor(bet.amount * 1_000_000)), blockHash, bet.txHash);
         }
     }, 180000);
 
@@ -150,7 +150,7 @@ export const startNiuNiu = async () => {
 export const betNuiNuiInstant = async (from: string, amount: number, currency: string) => {
 
     const block = await tronWeb.trx.getCurrentBlock();
-    const amountBase = BigNumber(Math.floor(amount * 1_000_000));
+    const amountBase = new BigNumber(Math.floor(amount * 1_000_000));
 
     const last5str = last5(block.blockID);
     const { banker, player, bankerTrip, playerTrip } = compute(last5str);
@@ -197,7 +197,7 @@ export const BetNuiNui = async (userId: number, amount: number, currency: string
 
     const block = await tronWeb.trx.getCurrentBlock();
 
-    const amountBase = BigNumber(Math.floor(amount * 1_000_000));
+    const amountBase = new BigNumber(Math.floor(amount * 1_000_000));
 
     const last5str = last5(block.blockID);
     const { banker, player, bankerTrip, playerTrip } = compute(last5str);
