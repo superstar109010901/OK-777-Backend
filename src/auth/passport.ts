@@ -14,7 +14,7 @@ function generateAlphanumericCode(length: number = 6) {
   return result;
 }
 
-async function ensureUserFromGoogle(profile: Profile) {
+async function ensureUserFromGoogle(profile: Profile, referralCode?: string) {
   const email = profile.emails && profile.emails[0] ? profile.emails[0].value.toLowerCase() : undefined;
   const displayName = profile.displayName || "Google User";
 
@@ -24,6 +24,15 @@ async function ensureUserFromGoogle(profile: Profile) {
 
   let user = await prisma.user.findUnique({ where: { email } });
   if (user) return user;
+
+  // Handle referral code if provided
+  let referredById;
+  if (referralCode) {
+    const referrer = await prisma.user.findUnique({ where: { referralCode } });
+    if (referrer) {
+      referredById = referrer.id;
+    }
+  }
 
   const randomPassword = await hashPassword(`${profile.id}:${Date.now()}`);
 
@@ -36,11 +45,30 @@ async function ensureUserFromGoogle(profile: Profile) {
       email_verified: true,
       name: displayName,
       referralCode: generateAlphanumericCode(),
+      referredById
     },
     select: { id: true, email: true }
   });
 
-  try { await createWallet(user.id); } catch (e) { /* ignore wallet errors here */ }
+  try { 
+    await createWallet(user.id); 
+    
+    // Trigger signup referral bonus if user was referred (same as regular registration)
+    if (referredById) {
+      try {
+        const { triggerSignupReferralBonus } = require('../db/bonus');
+        await triggerSignupReferralBonus(user.id, "USD");
+        console.log(`Signup referral bonus triggered for Google OAuth user ${user.id} referred by ${referredById}`);
+      } catch (error) {
+        console.error("Error triggering signup referral bonus for Google OAuth:", error);
+        // Don't throw error to avoid breaking OAuth flow
+      }
+    }
+  } catch (e) { 
+    console.error("Error creating wallet for Google OAuth user:", e);
+    // Don't throw error to avoid breaking OAuth flow
+  }
+  
   return user;
 }
 
@@ -55,7 +83,10 @@ const strategy = new GoogleStrategy(
     try {
       console.log(`[OAuth Strategy] Processing Google profile for: ${profile.emails?.[0]?.value}`);
       
-      const user = await ensureUserFromGoogle(profile);
+      // Extract referral code from query parameters if present
+      const referralCode = req.query?.referralCode || req.query?.ref;
+      
+      const user = await ensureUserFromGoogle(profile, referralCode);
       console.log(`[OAuth Strategy] User ${user.id} authenticated successfully`);
       
       return done(null, {

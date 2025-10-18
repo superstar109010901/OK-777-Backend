@@ -324,12 +324,12 @@ router.get("/auth/google/callback", passport.authenticate("google", { session: f
             });
         }
 
+        // Create JWT token with same structure as regular login
         const token = jwt.sign(
             {
                 id: user.id,
-                provider: user.provider,
-                displayName: user.displayName,
-                emails: user.emails,
+                email: user.emails?.[0]?.value,
+                role: "user"
             },
             process.env.JWTPRIVATEKEY as string,
             { expiresIn: "1h" }
@@ -345,15 +345,18 @@ router.get("/auth/google/callback", passport.authenticate("google", { session: f
             return res.redirect(302, redirectUrl);
         }
 
-        // Fallback: return JSON (useful for direct API testing)
-        res.json({ code: 200, data: { token } });
+        // Return same response format as regular login
+        res.json({ 
+            code: 200, 
+            data: { token },
+            message: "Google authentication successful"
+        });
 
     } catch (err: any) {
         console.error("OAuth callback error:", err);
-        res.status(500).json({ 
-            code: 500, 
-            message: "OAuth callback processing failed", 
-            error: err.toString() 
+        res.status(400).json({ 
+            code: 400, 
+            message: err.toString() 
         });
     }
 });
@@ -362,6 +365,13 @@ router.get("/auth/google/callback", passport.authenticate("google", { session: f
 router.get("/auth/google", (req, res, next) => {
     console.log(`OAuth initiation: ${req.protocol}://${req.get('host')}${req.originalUrl}`);
     console.log(`Expected callback: ${req.protocol}://${req.get('host')}/api/v1/users/auth/google/callback`);
+    
+    // Pass referral code through to the OAuth flow
+    const referralCode = req.query.referralCode || req.query.ref;
+    if (referralCode) {
+        console.log(`OAuth with referral code: ${referralCode}`);
+    }
+    
     passport.authenticate("google", { scope: ["profile", "email"], session: false })(req, res, next);
 });
 
