@@ -248,6 +248,27 @@ export const changePassword = async (userId: number, password: string, newPasswo
     }
 };
 
+// New function for setting password without old password verification (for Google OAuth users)
+export const setPassword = async (userId: number, newPassword: string) => {
+    try {
+        const existingUser = await prisma.user.findUnique({ where: { id: userId } });
+
+        if (!existingUser) {
+            throw new Error('User not found');
+        }
+
+        const hash = await hashPassword(newPassword);
+        await prisma.user.update({
+            where: { id: userId },
+            data: { password: hash }
+        });
+
+    } catch (err) {
+        console.log(err);
+        throw err;
+    }
+};
+
 
 export const setName = async (userId: number, name: string) => {
     try {

@@ -11,6 +11,7 @@ import {
     requestEmailVerificationByEmail,
     verifyEmailCodeByEmail,
     changePassword,
+    setPassword,
     setName,
     setPhone,
     getUserTeamByReferralCode
@@ -123,7 +124,13 @@ router.post<{}, {}>('/set-telegram', isAuthenticated, validateTelegram, async (r
     try {
         await setTelegram(id, body.telegram);
 
-        res.json({ message: "Ok", code: 200 });
+        res.json({ 
+            message: "Ok", 
+            code: 200,
+            data: {
+                telegram: body.telegram
+            }
+        });
 
     } catch (err: any) {
         res.status(400).json({ message: err.toString() });
@@ -263,6 +270,32 @@ router.post<{}, {}>('/change-password', isAuthenticated, async (req, res) => {
 
     try {
         await changePassword(id, body.password, body.newPassword);
+
+        res.json({ message: "Ok", code: 200 });
+
+    } catch (err: any) {
+        res.status(400).json({ message: err.toString(), code: 400 });
+    }
+
+});
+
+// New endpoint for setting password without old password verification (for Google OAuth users)
+router.post<{}, {}>('/set-password', isAuthenticated, async (req, res) => {
+
+    let id = (req as any)["token"].id;
+
+    const body = req.body;
+
+    if (!body.newPassword) {
+        res.status(400).send({
+            code: 400,
+            message: 'newPassword parametr required',
+        });
+        return;
+    }
+
+    try {
+        await setPassword(id, body.newPassword);
 
         res.json({ message: "Ok", code: 200 });
 
