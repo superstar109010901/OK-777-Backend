@@ -169,7 +169,7 @@ router.post<{}, {}>('/set-withdrawal-password', isAuthenticated, async (req, res
         return;
     }
     try {
-        await setWithdrawPassword(id, body.password);
+        await setWithdrawPassword(id, body.password, body.oldPassword);
 
         res.json({ message: "Ok", code: 200 });
     } catch (err: any) {

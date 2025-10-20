@@ -138,8 +138,26 @@ export const setAvatar = async (userId: number, url: string) => {
     }
 };
 
-export const setWithdrawPassword = async (userId: number, password: string) => {
+export const setWithdrawPassword = async (userId: number, password: string, oldPassword?: string) => {
     try {
+        const user = await prisma.user.findUnique({ where: { id: userId } });
+
+        if (!user) {
+            throw new Error('User not found');
+        }
+
+        // If old password is provided, verify it (for changing existing withdrawal password)
+        if (oldPassword && user.withdrawal_password) {
+            const isOldPasswordValid = await bcrypt.compare(oldPassword, user.withdrawal_password);
+            if (!isOldPasswordValid) {
+                throw new Error('Current withdrawal password is incorrect');
+            }
+        }
+
+        // If no old password provided but user already has withdrawal password, it's an error
+        if (!oldPassword && user.withdrawal_password) {
+            throw new Error('Current withdrawal password is required to change existing withdrawal password');
+        }
 
         const hash = await hashPassword(password);
 
