@@ -272,14 +272,19 @@ export const setPassword = async (userId: number, newPassword: string) => {
 
 export const setName = async (userId: number, name: string) => {
     try {
+        console.log('setName called with:', { userId, name, nameLength: name.length, nameBytes: Buffer.from(name, 'utf8').length });
+        console.log('Name characters:', Array.from(name).map(c => ({ char: c, code: c.charCodeAt(0).toString(16) })));
 
-        await prisma.user.update({
+        const result = await prisma.user.update({
             where: { id: userId },
             data: { name: name }
         });
 
+        console.log('setName result:', result);
+        return result;
+
     } catch (err) {
-        console.log(err);
+        console.log('setName error:', err);
         throw err;
     }
 };

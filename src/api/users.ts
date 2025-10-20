@@ -328,12 +328,20 @@ router.post<{}, {}>('/set-name', isAuthenticated, validateUsername, async (req, 
     let id = (req as any)["token"].id;
 
     const body = req.body;
+    console.log('set-name API route received:', { 
+        id, 
+        username: body.username, 
+        usernameLength: body.username?.length,
+        usernameBytes: body.username ? Buffer.from(body.username, 'utf8').length : 0,
+        bodyKeys: Object.keys(body)
+    });
 
     try {
-        await setName(id, body.username);
+        const result = await setName(id, body.username);
 
         res.json({ message: "Ok", code: 200, data: { name: body.username } });
     } catch (err: any) {
+        console.log('set-name API error:', err);
         res.status(400).json({ message: err.toString() });
     }
 

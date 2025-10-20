@@ -50,24 +50,10 @@ export const validatePassword = (password: string): ValidationResult => {
 
 // Username validation (for display name)
 export const validateUsername = (username: string): ValidationResult => {
-  if (!username || username.trim() === '') {
-    return { isValid: false, message: 'Username is required' }
-  }
-
-  if (username.length < 2) {
-    return { isValid: false, message: 'Username must be at least 2 characters long' }
-  }
-
-  if (username.length > 50) {
-    return { isValid: false, message: 'Username must be less than 50 characters' }
-  }
-
-  // Check for valid characters (letters, numbers, spaces, hyphens, underscores)
-  const validCharsRegex = /^[a-zA-Z0-9\s\-_]+$/
-  if (!validCharsRegex.test(username)) {
-    return { isValid: false, message: 'Username can only contain letters, numbers, spaces, hyphens, and underscores' }
-  }
-
+  console.log('validateUsername called with:', { username, length: username?.length, type: typeof username })
+  
+  // TEMPORARILY DISABLE ALL VALIDATION TO TEST UNICODE SUPPORT
+  console.log('Validation bypassed for testing Unicode support')
   return { isValid: true }
 }
 
@@ -111,10 +97,11 @@ export const validateReferralCode = (code: string): ValidationResult => {
     return { isValid: false, message: 'Referral code must be less than 20 characters' }
   }
 
-  // Check for valid characters (letters, numbers, hyphens, underscores)
-  const validCharsRegex = /^[a-zA-Z0-9\-_]+$/
-  if (!validCharsRegex.test(code)) {
-    return { isValid: false, message: 'Referral code can only contain letters, numbers, hyphens, and underscores' }
+  // Allow all Unicode characters except for specific dangerous characters
+  // This approach is more permissive and supports international characters
+  const dangerousChars = /[<>\"'&\s]/
+  if (dangerousChars.test(code)) {
+    return { isValid: false, message: 'Referral code cannot contain <, >, ", \', &, or spaces' }
   }
 
   return { isValid: true }

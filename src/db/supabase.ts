@@ -12,6 +12,11 @@ export const supabase = createClient(url, serviceKey, {
     persistSession: false,
     autoRefreshToken: false,
   },
+  global: {
+    headers: {
+      'Content-Type': 'application/json; charset=utf-8',
+    },
+  },
 });
 
 
