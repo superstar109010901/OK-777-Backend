@@ -25,6 +25,23 @@ import passport from "../auth/passport";
 import { validateSignup, validateSignin, validateTelegram, validateUsername } from '../middlewares/validation';
 import 'dotenv/config';
 const jwt = require('jsonwebtoken');
+import metamaskAuth from '../auth/metamask';
+import { verifyToken } from '../middlewares';
+
+// MetaMask user interface
+interface MetaMaskUser {
+  address: string;
+  type: string;
+}
+
+// Extend Express Request interface for MetaMask authentication
+declare global {
+  namespace Express {
+    interface Request {
+      metamaskUser?: MetaMaskUser;
+    }
+  }
+}
 
 const router = express.Router();
 
@@ -408,5 +425,39 @@ router.get("/auth/google", (req, res, next) => {
     passport.authenticate("google", { scope: ["profile", "email"], session: false })(req, res, next);
 });
 
+// MetaMask Authentication Routes
+router.use('/auth', metamaskAuth);
+
+// Protected profile route using JWT middleware
+router.get('/profile-metamask', verifyToken, async (req, res) => {
+    try {
+        const user = req.metamaskUser;
+        
+        if (!user || !user.address) {
+            return res.status(401).json({
+                code: 401,
+                message: 'User not authenticated'
+            });
+        }
+        
+        res.json({
+            code: 200,
+            message: 'Profile retrieved successfully',
+            data: {
+                user: {
+                    address: user.address,
+                    type: user.type,
+                    authenticatedAt: new Date().toISOString()
+                }
+            }
+        });
+    } catch (error) {
+        console.error('Error retrieving profile:', error);
+        res.status(500).json({
+            code: 500,
+            message: 'Internal server error'
+        });
+    }
+});
 
 export default router;

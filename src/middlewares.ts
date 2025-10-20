@@ -1,6 +1,7 @@
 import { NextFunction, Request, Response } from 'express';
 
 import ErrorResponse from './interfaces/ErrorResponse';
+export { verifyToken } from './middleware/auth';
 
 export function notFound(req: Request, res: Response, next: NextFunction) {
   res.status(404);
