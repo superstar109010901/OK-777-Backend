@@ -321,7 +321,29 @@ export async function getUserBets(userId: number, limit = 10, offset = 0) {
     });
 }
 
-export async function withdrawRequest(userId: number, to: string, currency: string, blockchain: string, amount: number) {
+export async function withdrawRequest(userId: number, to: string, currency: string, blockchain: string, amount: number, withdrawalPassword?: string) {
+
+    // SECURITY FIX: Validate withdrawal password
+    if (!withdrawalPassword) {
+        throw new Error('Withdrawal password is required for security');
+    }
+
+    // Get user to verify withdrawal password
+    const user = await prisma.user.findUnique({ where: { id: userId } });
+    if (!user) {
+        throw new Error('User not found');
+    }
+
+    if (!user.withdrawal_password) {
+        throw new Error('Withdrawal password not set. Please set a withdrawal password first.');
+    }
+
+    // Verify withdrawal password
+    const bcrypt = require('bcrypt');
+    const isWithdrawalPasswordValid = await bcrypt.compare(withdrawalPassword, user.withdrawal_password);
+    if (!isWithdrawalPasswordValid) {
+        throw new Error('Incorrect withdrawal password');
+    }
 
     // Validate amount
     const amountNum = Number(amount);

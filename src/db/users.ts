@@ -138,36 +138,46 @@ export const setAvatar = async (userId: number, url: string) => {
     }
 };
 
-export const setWithdrawPassword = async (userId: number, password: string, oldPassword?: string) => {
+export const setWithdrawPassword = async (userId: number, password: string, loginPassword: string) => {
     try {
+        // Fetch user from database
         const user = await prisma.user.findUnique({ where: { id: userId } });
 
         if (!user) {
             throw new Error('User not found');
         }
 
-        // If old password is provided, verify it (for changing existing withdrawal password)
-        if (oldPassword && user.withdrawal_password) {
-            const isOldPasswordValid = await bcrypt.compare(oldPassword, user.withdrawal_password);
-            if (!isOldPasswordValid) {
-                throw new Error('Current withdrawal password is incorrect');
-            }
+        // SECURITY: Always validate login password for security verification
+        if (!loginPassword) {
+            throw new Error('Login password is required for security verification');
         }
 
-        // If no old password provided but user already has withdrawal password, it's an error
-        if (!oldPassword && user.withdrawal_password) {
-            throw new Error('Current withdrawal password is required to change existing withdrawal password');
+        // Verify the login password using bcrypt (same method as login authentication)
+        console.log('Verifying login password for user:', userId);
+        console.log('Login password provided:', !!loginPassword);
+        console.log('User has stored password hash:', !!user.password);
+        
+        const isLoginPasswordValid = await bcrypt.compare(loginPassword, user.password);
+        console.log('Login password validation result:', isLoginPasswordValid);
+        
+        if (!isLoginPasswordValid) {
+            console.log('Login password validation failed - throwing error');
+            throw new Error('Invalid login password');
         }
+        
+        console.log('Login password validation passed - proceeding with withdrawal password setting');
 
+        // Hash the new withdrawal password
         const hash = await hashPassword(password);
 
+        // Update user's withdrawal password in database (can be set or changed)
         await prisma.user.update({
             where: { id: userId },
             data: { withdrawal_password: hash }
         });
 
     } catch (err) {
-        console.log(err);
+        console.log('Error setting withdrawal password:', err);
         throw err;
     }
 };

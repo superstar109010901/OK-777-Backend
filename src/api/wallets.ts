@@ -113,6 +113,15 @@ router.post<{}, {}>('/withdraw', isAuthenticated, async (req, res) => {
         return;
     }
 
+    // SECURITY FIX: Require withdrawal password for all withdrawals
+    if (!body.withdrawalPassword) {
+        res.status(400).send({
+            message: 'Withdrawal password is required for security',
+            code: 400
+        });
+        return;
+    }
+
     try {
         // Support either crypto amount (amount) or USD amount (amountUsd)
         let amount = body.amount;
@@ -125,7 +134,7 @@ router.post<{}, {}>('/withdraw', isAuthenticated, async (req, res) => {
             amount = await convert(amountUsdNum, 'USD', body.currency);
         }
 
-        await withdrawRequest(id, body.to, body.currency, body.blockchain, amount);
+        await withdrawRequest(id, body.to, body.currency, body.blockchain, amount, body.withdrawalPassword);
         res.json({
             code: 200,
             message: "Ok"

@@ -18,6 +18,7 @@ import {
 } from '../db/users';
 import { getUserReferralBonuses } from '../db/bonus';
 import isAuthenticated from '../utils/jwt';
+import prisma from '../db/prisma';
 import fs from "fs";
 import path from "path";
 import { sendEmail } from "../utils/email";
@@ -156,27 +157,54 @@ router.post<{}, {}>('/set-telegram', isAuthenticated, validateTelegram, async (r
 });
 
 router.post<{}, {}>('/set-withdrawal-password', isAuthenticated, async (req, res) => {
+    const userId = (req as any)["token"].id;
+    const { password, loginPassword } = req.body;
 
-    let id = (req as any)["token"].id;
-
-    const body = req.body;
-
-    if (!body.password) {
-        res.status(400).send({
+    // Validate required parameters
+    if (!password) {
+        return res.status(400).json({
             code: 400,
-            message: 'password parametr required',
+            message: 'Withdrawal password is required',
         });
-        return;
     }
+
+    // SECURITY: Always require login password for verification
+    if (!loginPassword) {
+        return res.status(400).json({
+            code: 400,
+            message: 'Login password is required for security verification',
+        });
+    }
+
+    // Validate password length (minimum security requirement)
+    if (password.length < 6) {
+        return res.status(400).json({
+            code: 400,
+            message: 'Withdrawal password must be at least 6 characters long',
+        });
+    }
+
     try {
-        await setWithdrawPassword(id, body.password, body.oldPassword);
+        // Verify login password and set withdrawal password
+        await setWithdrawPassword(userId, password, loginPassword);
 
-        res.json({ message: "Ok", code: 200 });
+        res.json({ 
+            code: 200,
+            message: 'Withdrawal password set successfully' 
+        });
     } catch (err: any) {
-        res.status(400).json({ message: err.toString() });
+        console.log('Set withdrawal password error:', err);
+        
+        // Return 401 for authentication failures, 400 for other errors
+        const statusCode = err.message?.includes('Invalid login password') ? 401 : 400;
+        
+        res.status(statusCode).json({ 
+            code: statusCode,
+            message: err.message || 'Failed to set withdrawal password'
+        });
     }
-
 });
+
 
 router.post<{}, {}>('/set-avatar', isAuthenticated, async (req, res) => {
 
