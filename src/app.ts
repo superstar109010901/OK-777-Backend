@@ -5,6 +5,7 @@ import seamless from './api/seamless';
 import cors from 'cors';
 import * as middlewares from './middlewares';
 import api from './api';
+import telegramAuth from './api/telegram';
 import MessageResponse from './interfaces/MessageResponse';
 import path from "path";
 import http from "http";
@@ -65,6 +66,7 @@ app.get('/health', (req, res) => {
 });
 
 app.use('/api/v1', api);
+app.use('/auth/telegram', telegramAuth);
 app.use('/v1/api/seamless', seamless);
 app.use(middlewares.notFound);
 app.use(middlewares.errorHandler);
